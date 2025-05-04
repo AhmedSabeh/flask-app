@@ -1,0 +1,51 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKER_IMAGE = "yourdockerhubusername/flask-app"
+        EC2_HOST = "ec2-user@<your-ec2-ip>"
+        SSH_KEY = credentials('ec2-ssh-key') // Jenkins credentials ID
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git 'https://github.com/yourusername/flask-app.git'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    sh "docker build -t $DOCKER_IMAGE ."
+                }
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh """
+                    echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                    docker push $DOCKER_IMAGE
+                    """
+                }
+            }
+        }
+
+        stage('Deploy on EC2') {
+            steps {
+                sshagent (credentials: ['ec2-ssh-key']) {
+                    sh """
+                    ssh -o StrictHostKeyChecking=no $EC2_HOST '
+                      docker pull $DOCKER_IMAGE &&
+                      docker rm -f flask-app || true &&
+                      docker run -d --name flask-app -p 80:5000 $DOCKER_IMAGE
+                    '
+                    """
+                }
+            }
+        }
+    }
+}
+
