@@ -1,0 +1,45 @@
+pipeline {
+    agent any
+
+    stages {
+        stage('Install Dependencies') {
+            steps {
+                echo "Installing dependencies..."
+                sh 'npm install'
+            }
+        }
+
+        stage('Branch-specific Steps') {
+            steps {
+                script {
+                    if (env.BRANCH_NAME == 'main') {
+                        echo "On main branch: running tests and build"
+                        sh 'npm run test'
+                        sh 'npm run build'
+                    } else if (env.BRANCH_NAME == 'dev') {
+                        echo "On dev branch: running tests only"
+                        sh 'npm run test'
+                    } else if (env.BRANCH_NAME.startsWith('feature/')) {
+                        echo "On feature branch: running lint only"
+                        sh 'npm run lint'
+                    } else {
+                        echo "Branch ${env.BRANCH_NAME} does not match specific rules; skipping steps"
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Build succeeded on branch ${env.BRANCH_NAME}"
+        }
+        failure {
+            echo "❌ Build failed on branch ${env.BRANCH_NAME}"
+        }
+        always {
+            cleanWs()
+        }
+    }
+}
+
